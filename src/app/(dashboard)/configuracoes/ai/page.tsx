@@ -16,6 +16,8 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 
+import { saveAIConfig } from '@/app/actions/ai-config'
+
 const PROVIDERS = [
   { id: 'openai', name: 'OpenAI (GPT-4o)', icon: '🤖' },
   { id: 'gemini', name: 'Google Gemini', icon: '♊' },
@@ -31,17 +33,32 @@ export default function AIPage() {
   const [baseUrl, setBaseUrl] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
-  const handleSaveConfig = () => {
+  const handleSaveConfig = async () => {
     if (!apiKey && provider !== 'custom') {
       toast.error('Informe sua API Key')
       return
     }
 
     setIsSaving(true)
-    setTimeout(() => {
+    try {
+      const result = await saveAIConfig({
+        provider,
+        apiKey,
+        model,
+        baseUrl
+      })
+
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        toast.success(`Configurações para ${provider.toUpperCase()} salvas com segurança!`)
+        setApiKey('') // Limpar a chave do campo por segurança após salvar
+      }
+    } catch (e) {
+      toast.error('Ocorreu um erro ao salvar as configurações.')
+    } finally {
       setIsSaving(false)
-      toast.success(`Configurações para ${provider.toUpperCase()} salvas!`)
-    }, 1000)
+    }
   }
 
   return (

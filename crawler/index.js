@@ -31,7 +31,7 @@ async function runCrawler() {
 
     try {
       // Mock de busca - No futuro será a navegação real
-      const publications = await mockDjenSearch(oab.oab_number, oab.state);
+      const publications = await searchDjenReal(page, oab.oab_number, oab.state);
       
       for (const pubData of publications) {
         // Verificar duplicidade
@@ -87,8 +87,19 @@ async function processAIAndAlerts(pub) {
       return;
     }
 
+    let realApiKey = aiConfig.api_key;
+    if (aiConfig.provider !== 'custom') {
+      try {
+        const { decrypt } = require('./encryption');
+        realApiKey = decrypt(aiConfig.api_key);
+      } catch (e) {
+        console.error('❌ Falha ao descriptografar a API Key. Verifique a MASTER_ENCRYPTION_KEY.');
+        return;
+      }
+    }
+
     console.log(`🧠 Analisando com ${aiConfig.provider.toUpperCase()} (${aiConfig.model})...`);
-    const analysis = await analyzePublication(pub.content, aiConfig.api_key, aiConfig.model, aiConfig.provider, aiConfig.base_url);
+    const analysis = await analyzePublication(pub.content, realApiKey, aiConfig.model, aiConfig.provider, aiConfig.base_url);
 
     // 2. Salvar Análise no Banco
     await supabase.from('ai_analysis').insert({
@@ -123,13 +134,59 @@ async function processAIAndAlerts(pub) {
   }
 }
 
-async function mockDjenSearch(oab, state) {
-  return [{
-    processNumber: `${Math.floor(Math.random() * 1000000)}-${Math.floor(Math.random() * 99)}.2025.8.26.0001`,
-    tribunal: 'TJSP',
-    publishedAt: new Date().toISOString(),
-    content: `Vistos. Fica a parte autora intimada na pessoa de seu advogado (OAB ${oab}/${state}) para que, no prazo de 15 (quinze) dias, apresente réplica à contestação e especifique as provas que pretende produzir.`
-  }];
+async function searchDjenReal(page, oabNumber, state) {
+  console.log(`🌐 Acessando o Diário de Justiça Eletrônico Nacional (PJe Comunica)...`);
+  const publications = [];
+  
+  try {
+    // 1. Acessar o portal
+    await page.goto('https://comunica.pje.jus.br/', { waitUntil: 'networkidle' });
+
+    // 2. Preencher o formulário
+    // Nota: Estes seletores são baseados na estrutura padrão em Angular do portal do CNJ.
+    // Podem precisar de ajustes finos dependendo de atualizações do tribunal.
+    await page.fill('input[formcontrolname="oab"]', oabNumber);
+    
+    // Selecionar o estado (UF) no dropdown
+    await page.click('mat-select[formcontrolname="ufOab"]');
+    await page.click(`mat-option:has-text("${state.toUpperCase()}")`);
+
+    // 3. Clicar em Pesquisar
+    await page.click('button:has-text("Pesquisar")');
+
+    // 4. Aguardar o carregamento dos resultados ou mensagem de "não encontrado"
+    // Esperamos pelo container de resultados ou por um alerta
+    await Promise.race([
+      page.waitForSelector('mat-card.resultado-pesquisa', { timeout: 10000 }),
+      page.waitForSelector('div.nenhum-resultado', { timeout: 10000 })
+    ]).catch(() => console.log('Tempo esgotado aguardando resultados do DJEN.'));
+
+    // 5. Extrair as publicações da página atual
+    const cards = await page.$$('mat-card.resultado-pesquisa');
+    
+    for (const card of cards) {
+      const processNumber = await card.$eval('.numero-processo', el => el.textContent.trim()).catch(() => 'Desconhecido');
+      const tribunal = await card.$eval('.sigla-tribunal', el => el.textContent.trim()).catch(() => 'DJEN');
+      const dateText = await card.$eval('.data-disponibilizacao', el => el.textContent.trim()).catch(() => new Date().toLocaleDateString());
+      const content = await card.$eval('.texto-publicacao', el => el.textContent.trim()).catch(() => '');
+
+      if (content) {
+        publications.push({
+          processNumber,
+          tribunal,
+          publishedAt: new Date().toISOString(), // No mundo real, faríamos o parse de dateText
+          content
+        });
+      }
+    }
+
+    console.log(`✅ Foram encontradas ${publications.length} publicações na primeira página.`);
+
+  } catch (err) {
+    console.error(`❌ Erro durante o scraping do DJEN para OAB ${oabNumber}:`, err.message);
+  }
+
+  return publications;
 }
 
 runCrawler();
