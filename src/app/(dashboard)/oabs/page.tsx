@@ -66,18 +66,18 @@ export default function OabsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+    <div className="space-y-8 pt-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-6 border-b border-slate-100 dark:border-slate-800">
+        <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight">OABs Monitoradas</h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground">
             Gerencie as inscrições da OAB que o sistema deve monitorar no DJEN.
           </p>
         </div>
         
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
+            <Button className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20 px-6">
               <Plus className="w-4 h-4 mr-2" /> Adicionar OAB
             </Button>
           </DialogTrigger>
