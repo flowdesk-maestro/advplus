@@ -2,8 +2,8 @@ name: AdvPlus Crawler Automático
 
 on:
   schedule:
-    # Roda a cada 6 horas (00:00, 06:00, 12:00, 18:00 UTC)
-    - cron: '0 */6 * * *'
+    # Roda diariamente às 06:30 AM (Horário de Brasília / 09:30 UTC)
+    - cron: '30 9 * * *'
   workflow_dispatch: # Permite rodar manualmente pelo painel do GitHub se necessário
 
 jobs:
