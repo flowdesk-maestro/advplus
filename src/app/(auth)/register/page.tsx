@@ -35,7 +35,13 @@ export default function RegisterPage() {
       })
 
       if (error) {
-        toast.error('Erro ao cadastrar', { description: error.message })
+        let message = 'Erro ao cadastrar. Tente novamente.'
+        if (error.message === 'User already registered') message = 'Este e-mail já está cadastrado.'
+        if (error.message === 'Email signups are disabled') message = 'O cadastro por e-mail está desativado no painel.'
+        if (error.message === 'email rate limit exceeded') message = 'Limite de e-mails excedido. Tente novamente em instantes.'
+        if (error.message === 'Signup requires email confirmation') message = 'O cadastro exige confirmação por e-mail.'
+        
+        toast.error(message)
         return
       }
 
