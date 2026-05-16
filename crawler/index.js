@@ -11,45 +11,6 @@ const supabase = createClient(
 async function runCrawler() {
   console.log('🚀 Iniciando Crawler AdvPlus com IA e Alertas...');
 
-  // SEED DE TESTE (Apenas se estiver vazio)
-  const { data: configs } = await supabase.from('ai_configs').select('id').limit(1);
-  if (!configs || configs.length === 0) {
-    console.log('🌱 Configs de IA/Telegram ausentes, criando para o escritório atual...');
-    const { data: oabs } = await supabase.from('monitored_oabs').select('law_office_id').limit(1);
-    if (oabs && oabs.length > 0) {
-      const officeId = oabs[0].law_office_id;
-      
-      // Criar usuário sistema se não existir
-      let { data: user } = await supabase.from('users').select('id').limit(1).single();
-      if (!user) {
-        const { data: newUser } = await supabase.from('users').insert({
-          id: '00000000-0000-0000-0000-000000000000',
-          name: 'Sistema',
-          email: 'sistema@advplus.com',
-          law_office_id: officeId
-        }).select().single();
-        user = newUser;
-      }
-
-      await supabase.from('ai_configs').insert({
-        law_office_id: officeId,
-        api_key: 'MOCK_KEY',
-        model: 'gpt-4o-mini',
-        provider: 'openai',
-        active: true
-      });
-
-      if (user) {
-        await supabase.from('telegram_integrations').insert({
-          user_id: user.id,
-          bot_token: 'MOCK_TOKEN',
-          chat_id: '123456789',
-          active: true
-        });
-      }
-    }
-  }
-
   // 1. Buscar OABs para monitorar
   const { data: oabs, error: oabError } = await supabase
     .from('monitored_oabs')
