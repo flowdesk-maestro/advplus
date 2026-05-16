@@ -1,4 +1,5 @@
-const { chromium } = require('playwright');
+const axios = require('axios');
+const cheerio = require('cheerio');
 const { createClient } = require('@supabase/supabase-js');
 const { analyzePublication, sendTelegramNotification } = require('./utils');
 require('dotenv').config();
@@ -11,7 +12,6 @@ const supabase = createClient(
 async function runCrawler() {
   console.log('🚀 Iniciando Crawler AdvPlus com IA e Alertas...');
 
-  // 1. Buscar OABs para monitorar
   const { data: oabs, error: oabError } = await supabase
     .from('monitored_oabs')
     .select('*, law_offices(*)');
@@ -23,18 +23,13 @@ async function runCrawler() {
 
   console.log(`🔍 Monitorando ${oabs.length} OAB(s)...`);
 
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-
   for (const oab of oabs) {
     console.log(`\n📌 Processando OAB/${oab.state}: ${oab.oab_number}`);
 
     try {
-      // Mock de busca - No futuro será a navegação real
-      const publications = await searchDjenReal(page, oab.oab_number, oab.state);
+      const publications = await searchDjenReal(oab.oab_number, oab.state);
       
       for (const pubData of publications) {
-        // Verificar duplicidade
         const { data: existing } = await supabase
           .from('publications')
           .select('id')
@@ -44,7 +39,6 @@ async function runCrawler() {
 
         if (existing) continue;
 
-        // Salvar publicação
         const { data: pub, error: pubErr } = await supabase
           .from('publications')
           .insert({
@@ -60,7 +54,6 @@ async function runCrawler() {
         if (pubErr) continue;
         console.log(`✨ Nova publicação: ${pub.process_number}`);
 
-        // --- GATILHO IA ---
         await processAIAndAlerts(pub);
       }
     } catch (err) {
@@ -68,13 +61,11 @@ async function runCrawler() {
     }
   }
 
-  await browser.close();
   console.log('\n🏁 Ciclo finalizado.');
 }
 
 async function processAIAndAlerts(pub) {
   try {
-    // 1. Buscar Configuração de IA
     const { data: aiConfig } = await supabase
       .from('ai_configs')
       .select('api_key, model, provider, base_url')
@@ -101,7 +92,6 @@ async function processAIAndAlerts(pub) {
     console.log(`🧠 Analisando com ${aiConfig.provider.toUpperCase()} (${aiConfig.model})...`);
     const analysis = await analyzePublication(pub.content, realApiKey, aiConfig.model, aiConfig.provider, aiConfig.base_url);
 
-    // 2. Salvar Análise no Banco
     await supabase.from('ai_analysis').insert({
       publication_id: pub.id,
       resumo: analysis.resumo,
@@ -111,7 +101,6 @@ async function processAIAndAlerts(pub) {
       urgente: analysis.urgente
     });
 
-    // 3. Buscar Configuração Telegram (Pode haver múltiplos usuários no escritório)
     const { data: telegrams } = await supabase
       .from('telegram_integrations')
       .select('bot_token, chat_id')
@@ -134,41 +123,43 @@ async function processAIAndAlerts(pub) {
   }
 }
 
-async function searchDjenReal(page, oabNumber, state) {
-  console.log(`🌐 Acessando o Diário de Justiça Eletrônico Nacional (PJe Comunica)...`);
+async function searchDjenReal(oabNumber, state) {
+  console.log(`🌐 Buscando DJEN via ScrapingBee para OAB ${oabNumber}/${state}...`);
   const publications = [];
   
+  if (!process.env.SCRAPINGBEE_API_KEY || process.env.SCRAPINGBEE_API_KEY === 'your_scrapingbee_api_key_here') {
+    throw new Error('A API Key do ScrapingBee não está configurada no .env. Cadastre-se em scrapingbee.com para obter a chave.');
+  }
+
+  // URL Direta de Pesquisa do DJEN
+  const targetUrl = `https://comunica.pje.jus.br/consulta?numeroOab=${oabNumber}&ufOab=${state.toUpperCase()}`;
+
   try {
-    // 1. Acessar o portal
-    await page.goto('https://comunica.pje.jus.br/', { waitUntil: 'networkidle' });
+    // Fazer a requisição via ScrapingBee
+    const response = await axios.get('https://app.scrapingbee.com/api/v1', {
+      params: {
+        api_key: process.env.SCRAPINGBEE_API_KEY,
+        url: targetUrl,
+        render_js: 'true',
+        wait_for: '.resultado-pesquisa, .nenhum-resultado', // Espera a tabela ou mensagem de vazio
+        premium_proxy: 'true', // Essencial para passar pelo Cloudflare do CNJ
+        country_code: 'br' // Proxies no Brasil para não disparar bloqueio geográfico
+      }
+    });
 
-    // 2. Preencher o formulário
-    // Nota: Estes seletores são baseados na estrutura padrão em Angular do portal do CNJ.
-    // Podem precisar de ajustes finos dependendo de atualizações do tribunal.
-    await page.fill('input[formcontrolname="oab"]', oabNumber);
-    
-    // Selecionar o estado (UF) no dropdown
-    await page.click('mat-select[formcontrolname="ufOab"]');
-    await page.click(`mat-option:has-text("${state.toUpperCase()}")`);
+    const $ = cheerio.load(response.data);
+    const cards = $('mat-card.resultado-pesquisa');
 
-    // 3. Clicar em Pesquisar
-    await page.click('button:has-text("Pesquisar")');
+    if (cards.length === 0) {
+       console.log('Nenhum card encontrado ou OAB sem publicações recentes.');
+       return publications;
+    }
 
-    // 4. Aguardar o carregamento dos resultados ou mensagem de "não encontrado"
-    // Esperamos pelo container de resultados ou por um alerta
-    await Promise.race([
-      page.waitForSelector('mat-card.resultado-pesquisa', { timeout: 10000 }),
-      page.waitForSelector('div.nenhum-resultado', { timeout: 10000 })
-    ]).catch(() => console.log('Tempo esgotado aguardando resultados do DJEN.'));
-
-    // 5. Extrair as publicações da página atual
-    const cards = await page.$$('mat-card.resultado-pesquisa');
-    
-    for (const card of cards) {
-      const processNumber = await card.$eval('.numero-processo', el => el.textContent.trim()).catch(() => 'Desconhecido');
-      const tribunal = await card.$eval('.sigla-tribunal', el => el.textContent.trim()).catch(() => 'DJEN');
-      const dateText = await card.$eval('.data-disponibilizacao', el => el.textContent.trim()).catch(() => new Date().toLocaleDateString());
-      const content = await card.$eval('.texto-publicacao', el => el.textContent.trim()).catch(() => '');
+    cards.each((i, el) => {
+      const processNumber = $(el).find('.numero-processo').text().trim() || 'Desconhecido';
+      const tribunal = $(el).find('.sigla-tribunal').text().trim() || 'DJEN';
+      const dateText = $(el).find('.data-disponibilizacao').text().trim() || new Date().toLocaleDateString();
+      const content = $(el).find('.texto-publicacao').text().trim();
 
       if (content) {
         publications.push({
@@ -178,12 +169,12 @@ async function searchDjenReal(page, oabNumber, state) {
           content
         });
       }
-    }
+    });
 
-    console.log(`✅ Foram encontradas ${publications.length} publicações na primeira página.`);
+    console.log(`✅ Extraídas ${publications.length} publicações.`);
 
   } catch (err) {
-    console.error(`❌ Erro durante o scraping do DJEN para OAB ${oabNumber}:`, err.message);
+    console.error(`❌ Erro no ScrapingBee:`, err.message);
   }
 
   return publications;

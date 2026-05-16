@@ -13,8 +13,12 @@
   "type": "commonjs",
   "dependencies": {
     "@supabase/supabase-js": "^2.105.4",
+    "axios": "^1.16.1",
+    "cheerio": "^1.2.0",
     "dotenv": "^17.4.2",
     "openai": "^6.38.0",
-    "playwright": "^1.60.0"
+    "playwright": "^1.60.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
 }
