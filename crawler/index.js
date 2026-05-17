@@ -143,7 +143,8 @@ async function searchDjenReal(oabNumber, state) {
         render_js: 'true',
         wait_for: '.resultado-pesquisa, .nenhum-resultado', // Espera a tabela ou mensagem de vazio
         premium_proxy: 'true', // Essencial para passar pelo Cloudflare do CNJ
-        country_code: 'br' // Proxies no Brasil para não disparar bloqueio geográfico
+        country_code: 'br', // Proxies no Brasil para não disparar bloqueio geográfico
+        block_resources: 'False' // Evita erros 400 caso o CNJ bloqueie recursos de fontes externas
       }
     });
 

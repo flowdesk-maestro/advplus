@@ -22,7 +22,8 @@ async function searchDjenReal(oabNumber, state) {
         render_js: 'true',
         wait_for: '.resultado-pesquisa, .nenhum-resultado',
         premium_proxy: 'true', 
-        country_code: 'br' 
+        country_code: 'br',
+        block_resources: 'False'
       }
     });
 
@@ -54,7 +55,7 @@ async function searchDjenReal(oabNumber, state) {
     console.log(`✅ Extraídas ${publications.length} publicações.`);
 
   } catch (err) {
-    console.error(`❌ Erro no ScrapingBee:`, err.message);
+    console.error(`❌ Erro no ScrapingBee:`, err.response?.data || err.message);
   }
 
   return publications;

@@ -45,7 +45,7 @@ export default async function DashboardPage() {
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" asChild>
-            <Link href="/publicacoes">Ver Relatórios</Link>
+            <Link href="/processos">Ver Processos</Link>
           </Button>
           <Button className="bg-indigo-600 hover:bg-indigo-700 text-white" asChild>
             <Link href="/oabs"><Plus className="w-4 h-4 mr-2" /> Nova OAB</Link>
@@ -80,7 +80,7 @@ export default async function DashboardPage() {
               <CardDescription>Capturas recentes do DJEN.</CardDescription>
             </div>
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/publicacoes" className="flex items-center">
+              <Link href="/processos" className="flex items-center">
                 Ver tudo <ArrowUpRight className="ml-1 w-4 h-4" />
               </Link>
             </Button>
